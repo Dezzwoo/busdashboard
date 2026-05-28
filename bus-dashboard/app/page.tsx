@@ -39,7 +39,7 @@ export default function Dashboard() {
   const [logs, setLogs] = useState<Log[]>([]);
   const [totals, setTotals] = useState<Total[]>([]);
   const [daily, setDaily] = useState<Daily[]>([]);
-  const [selectedBus, setSelectedBus] = useState("ALL");
+  const [selectedBus, setSelectedBus] = useState("BUS-01"); // ✅ default bus view
 
   // ======================
   // LOAD LOGS
@@ -118,7 +118,6 @@ export default function Dashboard() {
 
       {/* HEADER */}
       <div className="flex items-center gap-3 mb-6">
-
         <Image
           src="/wvtc.png"
           alt="Bus Logo"
@@ -131,7 +130,24 @@ export default function Dashboard() {
           <h1 className="text-5xl font-bold">
             Bus Control System
           </h1>
+        </div>
       </div>
+
+      {/* BUS SWITCH BUTTONS (NEW FEATURE) */}
+      <div className="flex gap-3 mb-6">
+        {["BUS-01", "BUS-02"].map((bus) => (
+          <button
+            key={bus}
+            onClick={() => setSelectedBus(bus)}
+            className={`px-4 py-2 rounded-lg border ${
+              selectedBus === bus
+                ? "bg-green-500 text-black"
+                : "bg-white/10"
+            }`}
+          >
+            {bus}
+          </button>
+        ))}
       </div>
 
       {/* GRID */}
@@ -233,9 +249,6 @@ export default function Dashboard() {
           <div className="bg-white/5 border border-white/10 rounded-2xl p-5">
             <h2 className="text-lg font-semibold">System Status</h2>
             <p className="text-green-400 font-bold mt-2">LIVE</p>
-            <p className="text-gray-400 text-sm">
-              Auto-refresh every 3 seconds
-            </p>
           </div>
 
         </div>
