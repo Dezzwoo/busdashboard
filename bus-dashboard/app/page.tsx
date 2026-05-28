@@ -2,136 +2,245 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
+import Image from "next/image";
 
-type Passenger = {
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  Tooltip,
+  CartesianGrid,
+  ResponsiveContainer,
+} from "recharts";
+
+// ======================
+// TYPES
+// ======================
+type Log = {
   id: number;
   timestamp: string;
-  passenger_count: number;
   bus_number: string;
+  passenger_count: number;
 };
 
-export default function Home() {
+type Total = {
+  bus_number: string;
+  total_passengers: number;
+};
 
-  const [data, setData] = useState<Passenger[]>([]);
+type Daily = {
+  day: string;
+  bus_number: string;
+  total_passengers: number;
+};
+
+export default function Dashboard() {
+  const [logs, setLogs] = useState<Log[]>([]);
+  const [totals, setTotals] = useState<Total[]>([]);
+  const [daily, setDaily] = useState<Daily[]>([]);
   const [selectedBus, setSelectedBus] = useState("ALL");
 
-  async function loadPassengers() {
-
+  // ======================
+  // LOAD LOGS
+  // ======================
+  async function loadLogs() {
     let query = supabase
       .from("passengers")
       .select("*")
       .order("id", { ascending: false });
 
-    // FILTER
     if (selectedBus !== "ALL") {
-      query = query.eq(
-        "bus_number",
-        selectedBus
-      );
+      query = query.eq("bus_number", selectedBus);
     }
 
-    const { data, error } = await query;
-
-    if (error) {
-      console.log(error);
-      return;
-    }
-
-    setData(data || []);
+    const { data } = await query;
+    setLogs(data || []);
   }
 
-  useEffect(() => {
+  // ======================
+  // LOAD TOTALS
+  // ======================
+  async function loadTotals() {
+    const { data } = await supabase.from("bus_totals").select("*");
+    setTotals(data || []);
+  }
 
-    loadPassengers();
+  // ======================
+  // LOAD DAILY GRAPH
+  // ======================
+  async function loadDaily() {
+    const { data } = await supabase
+      .from("daily_bus_passengers")
+      .select("*")
+      .order("day", { ascending: true });
+
+    setDaily(data || []);
+  }
+
+  // ======================
+  // AUTO REFRESH
+  // ======================
+  useEffect(() => {
+    loadLogs();
+    loadTotals();
+    loadDaily();
 
     const interval = setInterval(() => {
-      loadPassengers();
+      loadLogs();
+      loadTotals();
+      loadDaily();
     }, 3000);
 
     return () => clearInterval(interval);
-
   }, [selectedBus]);
 
+  // ======================
+  // FORMAT GRAPH DATA
+  // ======================
+  const chartData = daily.reduce((acc: any[], item) => {
+    if (!item?.day || !item?.bus_number) return acc;
+
+    let found = acc.find((d) => d.day === item.day);
+
+    if (!found) {
+      found = { day: item.day };
+      acc.push(found);
+    }
+
+    found[item.bus_number] = item.total_passengers ?? 0;
+
+    return acc;
+  }, []);
+
   return (
+    <main className="min-h-screen bg-gradient-to-br from-black via-gray-950 to-black text-white p-6">
 
-    <main className="min-h-screen bg-black text-white p-10">
+      {/* HEADER */}
+      <div className="flex items-center gap-3 mb-6">
 
-      <h1 className="text-4xl font-bold mb-8">
-        Bus Passenger Dashboard
-      </h1>
+        <Image
+          src="/wvtc.png"
+          alt="Bus Logo"
+          width={50}
+          height={50}
+          className="rounded-lg"
+        />
 
-      {/* FILTER BUTTONS */}
-
-      <div className="flex gap-4 mb-6">
-
-        <button
-          onClick={() => setSelectedBus("ALL")}
-          className="bg-blue-600 px-4 py-2 rounded"
-        >
-          ALL
-        </button>
-
-        <button
-          onClick={() => setSelectedBus("BUS-01")}
-          className="bg-green-600 px-4 py-2 rounded"
-        >
-          BUS-01
-        </button>
-
-        <button
-          onClick={() => setSelectedBus("BUS-02")}
-          className="bg-red-600 px-4 py-2 rounded"
-        >
-          BUS-02
-        </button>
-
+        <div>
+          <h1 className="text-5xl font-bold">
+            Bus Control System
+          </h1>
+      </div>
       </div>
 
-      {/* TABLE */}
+      {/* GRID */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
-      <table className="w-full border border-gray-700">
+        {/* LEFT */}
+        <div className="lg:col-span-2 space-y-6">
 
-        <thead className="bg-gray-900">
+          {/* LOGS */}
+          <div className="bg-white/5 border border-white/10 rounded-2xl p-5">
+            <h2 className="text-xl mb-4">📄 Live Logs</h2>
 
-          <tr>
-            <th className="border p-4">ID</th>
-            <th className="border p-4">Timestamp</th>
-            <th className="border p-4">Passenger Count</th>
-            <th className="border p-4">Bus Number</th>
-          </tr>
+            <div className="max-h-[300px] overflow-auto">
+              <table className="w-full text-sm">
 
-        </thead>
+                <thead className="text-gray-400 border-b border-white/10">
+                  <tr>
+                    <th className="text-left py-2">ID</th>
+                    <th className="text-left py-2">Bus</th>
+                    <th className="text-left py-2">Count</th>
+                    <th className="text-left py-2">Date</th>
+                  </tr>
+                </thead>
 
-        <tbody>
+                <tbody>
+                  {logs.map((l) => (
+                    <tr
+                      key={l.id}
+                      className="border-b border-white/5 hover:bg-white/5 transition"
+                    >
+                      <td className="py-2 text-gray-300">#{l.id}</td>
+                      <td className="py-2 font-semibold">{l.bus_number}</td>
+                      <td className="py-2 text-green-400 font-bold">
+                        {l.passenger_count}
+                      </td>
+                      <td className="py-2 text-gray-400">
+                        {new Date(l.timestamp).toLocaleString()}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
 
-          {data.map((item) => (
+              </table>
+            </div>
+          </div>
 
-            <tr key={item.id}>
+          {/* GRAPH */}
+          <div className="bg-white/5 border border-white/10 rounded-2xl p-5">
+            <h2 className="text-xl mb-4">📊 Daily Passenger Comparison</h2>
 
-              <td className="border p-4">
-                {item.id}
-              </td>
+            <ResponsiveContainer width="100%" height={300}>
+              <LineChart data={chartData}>
+                <CartesianGrid stroke="#333" />
+                <XAxis dataKey="day" />
+                <YAxis />
+                <Tooltip />
 
-              <td className="border p-4">
-                {item.timestamp}
-              </td>
+                <Line
+                  type="monotone"
+                  dataKey="BUS-01"
+                  stroke="#22c55e"
+                  strokeWidth={2}
+                />
 
-              <td className="border p-4">
-                {item.passenger_count}
-              </td>
+                <Line
+                  type="monotone"
+                  dataKey="BUS-02"
+                  stroke="#3b82f6"
+                  strokeWidth={2}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
 
-              <td className="border p-4">
-                {item.bus_number}
-              </td>
+        </div>
 
-            </tr>
+        {/* RIGHT */}
+        <div className="space-y-6">
 
-          ))}
+          {/* TOTALS */}
+          <div className="bg-white/5 border border-white/10 rounded-2xl p-5">
+            <h2 className="text-xl mb-4">📊 Bus Totals</h2>
 
-        </tbody>
+            {["BUS-01", "BUS-02"].map((bus) => {
+              const found = totals.find((t) => t.bus_number === bus);
 
-      </table>
+              return (
+                <div key={bus} className="mb-3 p-3 bg-white/5 rounded-xl">
+                  <p className="text-gray-400">{bus}</p>
+                  <p className="text-3xl text-green-400 font-bold">
+                    {found ? found.total_passengers : 0}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
 
+          {/* STATUS */}
+          <div className="bg-white/5 border border-white/10 rounded-2xl p-5">
+            <h2 className="text-lg font-semibold">System Status</h2>
+            <p className="text-green-400 font-bold mt-2">LIVE</p>
+            <p className="text-gray-400 text-sm">
+              Auto-refresh every 3 seconds
+            </p>
+          </div>
+
+        </div>
+
+      </div>
     </main>
   );
 }
