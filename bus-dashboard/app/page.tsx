@@ -40,49 +40,47 @@ export default function Dashboard() {
   const [selectedBus, setSelectedBus] = useState("BUS-01");
   const [graphData, setGraphData] = useState<Record<string, string | number>[]>([]);
 
-  // ======================
-  // LOAD LOGS — NO FILTER
-  // ======================
   async function loadLogs() {
     const { data } = await supabase
       .from("passengers")
       .select("*")
       .order("id", { ascending: false });
-
     setLogs(data || []);
   }
 
-  // ======================
-  // LOAD TOTALS
-  // ======================
   async function loadTotals() {
     const { data } = await supabase.from("bus_totals").select("*");
     setTotals(data || []);
   }
 
-  // ======================
-  // LOAD GRAPH — SELECTED BUS ONLY
-  // ======================
-async function loadGraph(selectedBus: string) {
-  const { data } = await supabase
-    .from("daily_bus_passengers")
-    .select("*")
-    .order("day", { ascending: true });
+  async function loadGraph(bus: string) {
+    const { data } = await supabase
+      .from("passengers")
+      .select("timestamp")
+      .eq("bus_number", bus)
+      .order("timestamp", { ascending: true });
 
-  if (!data || data.length === 0) return;
+    if (!data || data.length === 0) {
+      const today = new Date();
+      const placeholder = Array.from({ length: 7 }, (_, i) => {
+        const d = new Date(today);
+        d.setDate(d.getDate() - (6 - i));
+        return { day: d.toISOString().split("T")[0], [bus]: 0 };
+      });
+      setGraphData(placeholder);
+    } else {
+      // Count rows per day
+      const grouped: Record<string, number> = {};
+      data.forEach((item) => {
+        const day = new Date(item.timestamp).toISOString().split("T")[0];
+        grouped[day] = (grouped[day] || 0) + 1;
+      });
+      setGraphData(
+        Object.entries(grouped).map(([day, count]) => ({ day, [bus]: count }))
+      );
+    }
+  }
 
-  const grouped: Record<string, Record<string, string | number>> = {};
-
-  data.forEach((item) => {
-    if (!grouped[item.day]) grouped[item.day] = { day: item.day };
-    grouped[item.day][item.bus_number] = item.total_passengers ?? 0;
-  });
-
-  setGraphData(Object.values(grouped));
-}
-  // ======================
-  // AUTO REFRESH
-  // ======================
   useEffect(() => {
     loadLogs();
     loadTotals();
@@ -97,9 +95,6 @@ async function loadGraph(selectedBus: string) {
     return () => clearInterval(interval);
   }, [selectedBus]);
 
-  // ======================
-  // COLOR MAP
-  // ======================
   const colorMap: Record<string, string> = {
     "BUS-01": "#16a34a",
     "BUS-02": "#2563eb",
@@ -109,9 +104,6 @@ async function loadGraph(selectedBus: string) {
     "BUS-06": "#14b8a6",
   };
 
-  // ======================
-  // FILTER LOGS BY SELECTED BUS
-  // ======================
   const filteredLogs = logs.filter((l) => l.bus_number === selectedBus);
 
   return (
@@ -119,16 +111,8 @@ async function loadGraph(selectedBus: string) {
 
       {/* HEADER */}
       <div className="flex items-center gap-3 mb-6">
-        <Image
-          src="/wvtc.png"
-          alt="Bus Logo"
-          width={50}
-          height={50}
-          className="rounded-lg"
-        />
-        <div>
-          <h1 className="text-4xl font-bold text-white">Bus Control System</h1>
-        </div>
+        <Image src="/wvtc.png" alt="Bus Logo" width={50} height={50} className="rounded-lg" />
+        <h1 className="text-4xl font-bold text-white">Bus Control System</h1>
       </div>
 
       {/* BUS SWITCH BUTTONS */}
@@ -172,19 +156,12 @@ async function loadGraph(selectedBus: string) {
                     <th className="text-left py-2">Date</th>
                   </tr>
                 </thead>
-
                 <tbody>
                   {filteredLogs.map((l) => (
-                    <tr
-                      key={l.id}
-                      className="border-b border-gray-800 hover:bg-gray-800 transition"
-                    >
+                    <tr key={l.id} className="border-b border-gray-800 hover:bg-gray-800 transition">
                       <td className="py-2 text-gray-400">#{l.id}</td>
                       <td className="py-2 font-semibold">{l.bus_number}</td>
-                      <td
-                        className="py-2 font-bold"
-                        style={{ color: colorMap[l.bus_number] }}
-                      >
+                      <td className="py-2 font-bold" style={{ color: colorMap[l.bus_number] }}>
                         {l.passenger_count}
                       </td>
                       <td className="py-2 text-gray-400">
@@ -192,7 +169,6 @@ async function loadGraph(selectedBus: string) {
                       </td>
                     </tr>
                   ))}
-
                   {filteredLogs.length === 0 && (
                     <tr>
                       <td colSpan={4} className="py-4 text-center text-gray-500">
@@ -205,59 +181,69 @@ async function loadGraph(selectedBus: string) {
             </div>
           </div>
 
-    {/* GRAPH */}
-<div className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
-  <h2 className="text-xl mb-4">📊 Daily Passenger Comparison —{" "}
-    <span style={{ color: colorMap[selectedBus] }}>{selectedBus}</span>
-  </h2>
-  <ResponsiveContainer width="100%" height={300}>
-    <LineChart data={graphData}>
-      <CartesianGrid stroke="#333" />
-      <XAxis dataKey="day" tick={{ fontSize: 11, fill: "#9ca3af" }}
-        tickFormatter={(val) => {
-          const [year, month, day] = val.split("-");
-          const date = new Date(Number(year), Number(month) - 1, Number(day));
-          return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-        }}
-      />
-      <YAxis tick={{ fontSize: 11, fill: "#9ca3af" }} />
-      <Tooltip
-        contentStyle={{ background: "#111827", border: "1px solid #374151", color: "#f9fafb" }}
-      />
-      <Line
-        type="monotone"
-        dataKey={selectedBus}
-        stroke={colorMap[selectedBus]}
-        strokeWidth={2}
-        dot={false}
-      />
-    </LineChart>
-  </ResponsiveContainer>
-</div>
-</div>
+          {/* GRAPH */}
+          <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
+            <h2 className="text-xl mb-4">
+              📊 Daily Passenger Comparison —{" "}
+              <span style={{ color: colorMap[selectedBus] }}>{selectedBus}</span>
+            </h2>
+            <ResponsiveContainer width="100%" height={300}>
+              <LineChart data={graphData}>
+                <CartesianGrid stroke="#1f2937" />
+                <XAxis
+                  dataKey="day"
+                  tick={{ fontSize: 11, fill: "#9ca3af" }}
+                  tickFormatter={(val) => {
+                    const [year, month, day] = val.split("-");
+                    const date = new Date(Number(year), Number(month) - 1, Number(day));
+                    return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+                  }}
+                />
+                <YAxis tick={{ fontSize: 11, fill: "#9ca3af" }} allowDecimals={false} />
+                <Tooltip
+                  contentStyle={{ background: "#111827", border: "1px solid #374151", color: "#f9fafb" }}
+                  labelFormatter={(val) => {
+                    const [year, month, day] = val.split("-");
+                    const date = new Date(Number(year), Number(month) - 1, Number(day));
+                    return date.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" });
+                  }}
+                />
+                <Line
+                  type="monotone"
+                  dataKey={selectedBus}
+                  stroke={colorMap[selectedBus]}
+                  strokeWidth={2.5}
+                  dot={{ r: 4, fill: colorMap[selectedBus] }}
+                  activeDot={{ r: 6 }}
+                  connectNulls
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+
+        </div>
 
         {/* RIGHT */}
         <div className="space-y-6">
 
-          {/* TOTALS */}
-<div className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
-  <h2 className="text-xl font-semibold mb-4">🚌 Bus Total Passengers</h2>
-
-  {(() => {
-    const found = totals.find((t) => t.bus_number === selectedBus);
-    return (
-      <div
-        className="p-3 bg-gray-800 rounded-xl border-l-4"
-        style={{ borderLeftColor: colorMap[selectedBus] }}
-      >
-        <p className="text-gray-400 text-sm">{selectedBus}</p>
-        <p className="text-3xl font-bold" style={{ color: colorMap[selectedBus] }}>
-          {found ? found.total_passengers : 0}
-        </p>
-      </div>
-    );
-  })()}
-</div>
+          {/* TOTALS — only selected bus */}
+          <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
+            <h2 className="text-xl font-semibold mb-4">🚌 Bus Total Passengers</h2>
+            {(() => {
+              const found = totals.find((t) => t.bus_number === selectedBus);
+              return (
+                <div
+                  className="p-3 bg-gray-800 rounded-xl border-l-4"
+                  style={{ borderLeftColor: colorMap[selectedBus] }}
+                >
+                  <p className="text-gray-400 text-sm">{selectedBus}</p>
+                  <p className="text-3xl font-bold" style={{ color: colorMap[selectedBus] }}>
+                    {found ? found.total_passengers : 0}
+                  </p>
+                </div>
+              );
+            })()}
+          </div>
 
           {/* STATUS */}
           <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
@@ -269,7 +255,6 @@ async function loadGraph(selectedBus: string) {
           </div>
 
         </div>
-
       </div>
     </main>
   );
