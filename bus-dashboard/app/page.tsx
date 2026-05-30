@@ -47,7 +47,8 @@ export default function Dashboard() {
   const [graphData, setGraphData] = useState<Record<string, string | number>[]>([]);
 
   // === HISTORY ===
-  const [selectedDate, setSelectedDate] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [historyData, setHistoryData] = useState<HistoryRecord[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
 
@@ -85,16 +86,63 @@ export default function Dashboard() {
     }
   }
 
-  async function loadHistory(date: string) {
-    if (!date) return;
+  async function loadHistory(from: string, to: string) {
+    if (!from || !to) return;
     setHistoryLoading(true);
     const { data } = await supabase
       .from("daily_totals_history")
       .select("*")
-      .eq("date", date)
+      .gte("date", from)
+      .lte("date", to)
+      .order("date", { ascending: true })
       .order("bus_number", { ascending: true });
     setHistoryData(data || []);
     setHistoryLoading(false);
+  }
+
+  function downloadCSV() {
+    const headers = ["Bus", "Date", "Total Passengers"];
+    const rows = historyData.map((h) => [h.bus_number, h.date, h.total_passengers]);
+    const csvContent = [headers, ...rows].map((r) => r.join(",")).join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `bus-report-${dateFrom}-to-${dateTo}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function printReport() {
+    const printContent = `
+      <html>
+        <head>
+          <title>Bus Report ${dateFrom} to ${dateTo}</title>
+          <style>
+            body { font-family: Arial, sans-serif; padding: 20px; }
+            h1 { font-size: 20px; margin-bottom: 4px; }
+            p { color: #666; font-size: 13px; margin-bottom: 16px; }
+            table { width: 100%; border-collapse: collapse; font-size: 13px; }
+            th { text-align: left; padding: 8px; border-bottom: 2px solid #ccc; color: #555; }
+            td { padding: 8px; border-bottom: 1px solid #eee; }
+          </style>
+        </head>
+        <body>
+          <h1>Bus Passenger Report</h1>
+          <p>Date range: ${dateFrom} — ${dateTo}</p>
+          <table>
+            <thead><tr><th>Bus</th><th>Date</th><th>Total Passengers</th></tr></thead>
+            <tbody>
+              ${historyData.map((h) => `<tr><td>${h.bus_number}</td><td>${h.date}</td><td>${h.total_passengers}</td></tr>`).join("")}
+            </tbody>
+          </table>
+        </body>
+      </html>
+    `;
+    const win = window.open("", "_blank");
+    win?.document.write(printContent);
+    win?.document.close();
+    win?.print();
   }
 
   useEffect(() => {
@@ -253,28 +301,57 @@ export default function Dashboard() {
           <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm">
             <h2 className="text-xl font-semibold mb-4">🗓️ Past Day Totals</h2>
 
-            <div className="flex gap-3 mb-4">
-              <input
-                type="date"
-                value={selectedDate}
-                onChange={(e) => setSelectedDate(e.target.value)}
-                className="bg-gray-100 border border-gray-300 rounded-lg px-3 py-2 text-gray-900 text-sm focus:outline-none focus:border-green-500 transition"
-              />
+            <div className="flex flex-wrap gap-3 mb-4">
+              <div className="flex items-center gap-2">
+                <label className="text-sm text-gray-500">From</label>
+                <input
+                  type="date"
+                  value={dateFrom}
+                  onChange={(e) => setDateFrom(e.target.value)}
+                  className="bg-gray-100 border border-gray-300 rounded-lg px-3 py-2 text-gray-900 text-sm focus:outline-none focus:border-green-500 transition"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <label className="text-sm text-gray-500">To</label>
+                <input
+                  type="date"
+                  value={dateTo}
+                  onChange={(e) => setDateTo(e.target.value)}
+                  className="bg-gray-100 border border-gray-300 rounded-lg px-3 py-2 text-gray-900 text-sm focus:outline-none focus:border-green-500 transition"
+                />
+              </div>
               <button
-                onClick={() => loadHistory(selectedDate)}
-                disabled={!selectedDate}
+                onClick={() => loadHistory(dateFrom, dateTo)}
+                disabled={!dateFrom || !dateTo}
                 className="px-4 py-2 bg-green-600 hover:bg-green-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-lg transition"
               >
-                Check
+                Search
               </button>
+
+              {historyData.length > 0 && (
+                <>
+                  <button
+                    onClick={downloadCSV}
+                    className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold rounded-lg transition"
+                  >
+                    ⬇️ CSV
+                  </button>
+                  <button
+                    onClick={printReport}
+                    className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white text-sm font-semibold rounded-lg transition"
+                  >
+                    🖨️ Print / Save PDF
+                  </button>
+                </>
+              )}
             </div>
 
             {historyLoading && (
               <p className="text-gray-400 text-sm">Loading...</p>
             )}
 
-            {!historyLoading && selectedDate && historyData.length === 0 && (
-              <p className="text-gray-400 text-sm">No data found for this date.</p>
+            {!historyLoading && dateFrom && dateTo && historyData.length === 0 && (
+              <p className="text-gray-400 text-sm">No data found for this date range.</p>
             )}
 
             {!historyLoading && historyData.length > 0 && (
@@ -287,8 +364,8 @@ export default function Dashboard() {
                   </tr>
                 </thead>
                 <tbody>
-                  {historyData.map((h) => (
-                    <tr key={h.bus_number} className="border-b border-gray-100">
+                  {historyData.map((h, i) => (
+                    <tr key={i} className="border-b border-gray-100">
                       <td className="py-2 font-semibold" style={{ color: colorMap[h.bus_number] }}>
                         {h.bus_number}
                       </td>
