@@ -29,6 +29,12 @@ type Total = {
   total_passengers: number;
 };
 
+type HistoryRecord = {
+  bus_number: string;
+  date: string;
+  total_passengers: number;
+};
+
 // ======================
 // BUS LIST — single source of truth
 // ======================
@@ -39,6 +45,11 @@ export default function Dashboard() {
   const [totals, setTotals] = useState<Total[]>([]);
   const [selectedBus, setSelectedBus] = useState("BUS-01");
   const [graphData, setGraphData] = useState<Record<string, string | number>[]>([]);
+
+  // === HISTORY ===
+  const [selectedDate, setSelectedDate] = useState("");
+  const [historyData, setHistoryData] = useState<HistoryRecord[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
 
   async function loadLogs() {
     const { data } = await supabase
@@ -69,7 +80,6 @@ export default function Dashboard() {
       });
       setGraphData(placeholder);
     } else {
-      // Count rows per day
       const grouped: Record<string, number> = {};
       data.forEach((item) => {
         const day = new Date(item.timestamp).toISOString().split("T")[0];
@@ -79,6 +89,18 @@ export default function Dashboard() {
         Object.entries(grouped).map(([day, count]) => ({ day, [bus]: count }))
       );
     }
+  }
+
+  async function loadHistory(date: string) {
+    if (!date) return;
+    setHistoryLoading(true);
+    const { data } = await supabase
+      .from("daily_totals_history")
+      .select("*")
+      .eq("date", date)
+      .order("bus_number", { ascending: true });
+    setHistoryData(data || []);
+    setHistoryLoading(false);
   }
 
   useEffect(() => {
@@ -219,6 +241,60 @@ export default function Dashboard() {
                 />
               </LineChart>
             </ResponsiveContainer>
+          </div>
+
+          {/* HISTORY */}
+          <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
+            <h2 className="text-xl font-semibold mb-4">🗓️ Past Day Totals</h2>
+
+            <div className="flex gap-3 mb-4">
+              <input
+                type="date"
+                value={selectedDate}
+                onChange={(e) => setSelectedDate(e.target.value)}
+                className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-green-500 transition"
+              />
+              <button
+                onClick={() => loadHistory(selectedDate)}
+                disabled={!selectedDate}
+                className="px-4 py-2 bg-green-600 hover:bg-green-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-lg transition"
+              >
+                Check
+              </button>
+            </div>
+
+            {historyLoading && (
+              <p className="text-gray-500 text-sm">Loading...</p>
+            )}
+
+            {!historyLoading && selectedDate && historyData.length === 0 && (
+              <p className="text-gray-500 text-sm">No data found for this date.</p>
+            )}
+
+            {!historyLoading && historyData.length > 0 && (
+              <table className="w-full text-sm">
+                <thead className="text-gray-400 border-b border-gray-700">
+                  <tr>
+                    <th className="text-left py-2">Bus</th>
+                    <th className="text-left py-2">Date</th>
+                    <th className="text-left py-2">Total Passengers</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {historyData.map((h) => (
+                    <tr key={h.bus_number} className="border-b border-gray-800">
+                      <td className="py-2 font-semibold" style={{ color: colorMap[h.bus_number] }}>
+                        {h.bus_number}
+                      </td>
+                      <td className="py-2 text-gray-400">{h.date}</td>
+                      <td className="py-2 font-bold" style={{ color: colorMap[h.bus_number] }}>
+                        {h.total_passengers}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
           </div>
 
         </div>
