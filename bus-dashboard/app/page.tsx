@@ -414,24 +414,31 @@ export default function Dashboard() {
         {/* RIGHT */}
         <div className="space-y-6">
 
-          {/* TOTALS — only selected bus */}
-          <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm">
-            <h2 className="text-xl font-semibold mb-4">🚌 Bus Total Passengers</h2>
-            {(() => {
-              const todayCount = filteredLogs.length;
-              return (
-                <div
-                  className="p-3 bg-gray-50 rounded-xl border-l-4"
-                  style={{ borderLeftColor: colorMap[selectedBus] }}
-                >
-                  <p className="text-gray-500 text-sm">{selectedBus}</p>
-                  <p className="text-3xl font-bold" style={{ color: colorMap[selectedBus] }}>
-                    {todayCount}
-                  </p>
-                </div>
-              );
-            })()}
-          </div>
+          {/* TOTALS — all buses */}
+<div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm">
+  <h2 className="text-xl font-semibold mb-4">🚌 Bus Total Passengers</h2>
+  <div className="space-y-3">
+    {BUS_LIST.map((bus) => {
+      const count = logs.filter(
+        (l) =>
+          l.bus_number === bus &&
+          new Date(l.timestamp).toDateString() === today
+      ).length;
+      return (
+        <div
+          key={bus}
+          className="p-3 bg-gray-50 rounded-xl border-l-4"
+          style={{ borderLeftColor: colorMap[bus] }}
+        >
+          <p className="text-gray-500 text-sm">{bus}</p>
+          <p className="text-2xl font-bold" style={{ color: colorMap[bus] }}>
+            {count}
+          </p>
+        </div>
+      );
+    })}
+  </div>
+</div>
 
           {/* STATUS */}
           <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm">
