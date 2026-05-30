@@ -29,32 +29,26 @@ type Total = {
   total_passengers: number;
 };
 
-type Daily = {
-  day: string;
-  bus_number: string;
-  total_passengers: number;
-};
+// ======================
+// BUS LIST — single source of truth
+// ======================
+const BUS_LIST = ["BUS-01", "BUS-02", "BUS-03", "BUS-04", "BUS-05", "BUS-06"];
 
 export default function Dashboard() {
   const [logs, setLogs] = useState<Log[]>([]);
   const [totals, setTotals] = useState<Total[]>([]);
-  const [daily, setDaily] = useState<Daily[]>([]);
-  const [selectedBus, setSelectedBus] = useState("BUS-01"); // ✅ default bus view
+  const [selectedBus, setSelectedBus] = useState("BUS-01");
+  const [graphData, setGraphData] = useState<Record<string, string | number>[]>([]);
 
   // ======================
-  // LOAD LOGS
+  // LOAD LOGS — NO FILTER
   // ======================
   async function loadLogs() {
-    let query = supabase
+    const { data } = await supabase
       .from("passengers")
       .select("*")
       .order("id", { ascending: false });
 
-    if (selectedBus !== "ALL") {
-      query = query.eq("bus_number", selectedBus);
-    }
-
-    const { data } = await query;
     setLogs(data || []);
   }
 
@@ -67,54 +61,61 @@ export default function Dashboard() {
   }
 
   // ======================
-  // LOAD DAILY GRAPH
+  // LOAD GRAPH — SELECTED BUS ONLY
   // ======================
-  async function loadDaily() {
-    const { data } = await supabase
-      .from("daily_bus_passengers")
-      .select("*")
-      .order("day", { ascending: true });
+async function loadGraph(selectedBus: string) {
+  const { data } = await supabase
+    .from("daily_bus_passengers")
+    .select("*")
+    .order("day", { ascending: true });
 
-    setDaily(data || []);
-  }
+  if (!data || data.length === 0) return;
 
+  const grouped: Record<string, Record<string, string | number>> = {};
+
+  data.forEach((item) => {
+    if (!grouped[item.day]) grouped[item.day] = { day: item.day };
+    grouped[item.day][item.bus_number] = item.total_passengers ?? 0;
+  });
+
+  setGraphData(Object.values(grouped));
+}
   // ======================
   // AUTO REFRESH
   // ======================
   useEffect(() => {
     loadLogs();
     loadTotals();
-    loadDaily();
+    loadGraph(selectedBus);
 
     const interval = setInterval(() => {
       loadLogs();
       loadTotals();
-      loadDaily();
+      loadGraph(selectedBus);
     }, 3000);
 
     return () => clearInterval(interval);
   }, [selectedBus]);
 
   // ======================
-  // FORMAT GRAPH DATA
+  // COLOR MAP
   // ======================
-  const chartData = daily.reduce((acc: any[], item) => {
-    if (!item?.day || !item?.bus_number) return acc;
+  const colorMap: Record<string, string> = {
+    "BUS-01": "#16a34a",
+    "BUS-02": "#2563eb",
+    "BUS-03": "#d97706",
+    "BUS-04": "#db2777",
+    "BUS-05": "#7c3aed",
+    "BUS-06": "#14b8a6",
+  };
 
-    let found = acc.find((d) => d.day === item.day);
-
-    if (!found) {
-      found = { day: item.day };
-      acc.push(found);
-    }
-
-    found[item.bus_number] = item.total_passengers ?? 0;
-
-    return acc;
-  }, []);
+  // ======================
+  // FILTER LOGS BY SELECTED BUS
+  // ======================
+  const filteredLogs = logs.filter((l) => l.bus_number === selectedBus);
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-black via-gray-950 to-black text-white p-6">
+    <main className="min-h-screen bg-gray-950 text-gray-100 p-6">
 
       {/* HEADER */}
       <div className="flex items-center gap-3 mb-6">
@@ -125,25 +126,23 @@ export default function Dashboard() {
           height={50}
           className="rounded-lg"
         />
-
         <div>
-          <h1 className="text-5xl font-bold">
-            Bus Control System
-          </h1>
+          <h1 className="text-4xl font-bold text-white">Bus Control System</h1>
         </div>
       </div>
 
-      {/* BUS SWITCH BUTTONS (NEW FEATURE) */}
-      <div className="flex gap-3 mb-6">
-        {["BUS-01", "BUS-02"].map((bus) => (
+      {/* BUS SWITCH BUTTONS */}
+      <div className="flex flex-wrap gap-3 mb-6">
+        {BUS_LIST.map((bus) => (
           <button
             key={bus}
             onClick={() => setSelectedBus(bus)}
-            className={`px-4 py-2 rounded-lg border ${
-              selectedBus === bus
-                ? "bg-green-500 text-black"
-                : "bg-white/10"
-            }`}
+            style={{
+              borderColor: colorMap[bus],
+              backgroundColor: selectedBus === bus ? colorMap[bus] : "transparent",
+              color: selectedBus === bus ? "#fff" : colorMap[bus],
+            }}
+            className="px-4 py-2 rounded-lg border-2 font-semibold transition-all duration-200 hover:opacity-80"
           >
             {bus}
           </button>
@@ -157,13 +156,15 @@ export default function Dashboard() {
         <div className="lg:col-span-2 space-y-6">
 
           {/* LOGS */}
-          <div className="bg-white/5 border border-white/10 rounded-2xl p-5">
-            <h2 className="text-xl mb-4">📄 Live Logs</h2>
+          <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
+            <h2 className="text-xl font-semibold mb-4">
+              📄 Live Logs —{" "}
+              <span style={{ color: colorMap[selectedBus] }}>{selectedBus}</span>
+            </h2>
 
             <div className="max-h-[300px] overflow-auto">
               <table className="w-full text-sm">
-
-                <thead className="text-gray-400 border-b border-white/10">
+                <thead className="text-gray-400 border-b border-gray-700">
                   <tr>
                     <th className="text-left py-2">ID</th>
                     <th className="text-left py-2">Bus</th>
@@ -173,14 +174,17 @@ export default function Dashboard() {
                 </thead>
 
                 <tbody>
-                  {logs.map((l) => (
+                  {filteredLogs.map((l) => (
                     <tr
                       key={l.id}
-                      className="border-b border-white/5 hover:bg-white/5 transition"
+                      className="border-b border-gray-800 hover:bg-gray-800 transition"
                     >
-                      <td className="py-2 text-gray-300">#{l.id}</td>
+                      <td className="py-2 text-gray-400">#{l.id}</td>
                       <td className="py-2 font-semibold">{l.bus_number}</td>
-                      <td className="py-2 text-green-400 font-bold">
+                      <td
+                        className="py-2 font-bold"
+                        style={{ color: colorMap[l.bus_number] }}
+                      >
                         {l.passenger_count}
                       </td>
                       <td className="py-2 text-gray-400">
@@ -188,67 +192,80 @@ export default function Dashboard() {
                       </td>
                     </tr>
                   ))}
-                </tbody>
 
+                  {filteredLogs.length === 0 && (
+                    <tr>
+                      <td colSpan={4} className="py-4 text-center text-gray-500">
+                        No logs for {selectedBus} yet.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
               </table>
             </div>
           </div>
 
-          {/* GRAPH */}
-          <div className="bg-white/5 border border-white/10 rounded-2xl p-5">
-            <h2 className="text-xl mb-4">📊 Daily Passenger Comparison</h2>
-
-            <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={chartData}>
-                <CartesianGrid stroke="#333" />
-                <XAxis dataKey="day" />
-                <YAxis />
-                <Tooltip />
-
-                <Line
-                  type="monotone"
-                  dataKey="BUS-01"
-                  stroke="#22c55e"
-                  strokeWidth={2}
-                />
-
-                <Line
-                  type="monotone"
-                  dataKey="BUS-02"
-                  stroke="#3b82f6"
-                  strokeWidth={2}
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-
-        </div>
+    {/* GRAPH */}
+<div className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
+  <h2 className="text-xl mb-4">📊 Daily Passenger Comparison —{" "}
+    <span style={{ color: colorMap[selectedBus] }}>{selectedBus}</span>
+  </h2>
+  <ResponsiveContainer width="100%" height={300}>
+    <LineChart data={graphData}>
+      <CartesianGrid stroke="#333" />
+      <XAxis dataKey="day" tick={{ fontSize: 11, fill: "#9ca3af" }}
+        tickFormatter={(val) => {
+          const [year, month, day] = val.split("-");
+          const date = new Date(Number(year), Number(month) - 1, Number(day));
+          return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+        }}
+      />
+      <YAxis tick={{ fontSize: 11, fill: "#9ca3af" }} />
+      <Tooltip
+        contentStyle={{ background: "#111827", border: "1px solid #374151", color: "#f9fafb" }}
+      />
+      <Line
+        type="monotone"
+        dataKey={selectedBus}
+        stroke={colorMap[selectedBus]}
+        strokeWidth={2}
+        dot={false}
+      />
+    </LineChart>
+  </ResponsiveContainer>
+</div>
+</div>
 
         {/* RIGHT */}
         <div className="space-y-6">
 
           {/* TOTALS */}
-          <div className="bg-white/5 border border-white/10 rounded-2xl p-5">
-            <h2 className="text-xl mb-4">📊 Bus Totals</h2>
+<div className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
+  <h2 className="text-xl font-semibold mb-4">🚌 Bus Total Passengers</h2>
 
-            {["BUS-01", "BUS-02"].map((bus) => {
-              const found = totals.find((t) => t.bus_number === bus);
-
-              return (
-                <div key={bus} className="mb-3 p-3 bg-white/5 rounded-xl">
-                  <p className="text-gray-400">{bus}</p>
-                  <p className="text-3xl text-green-400 font-bold">
-                    {found ? found.total_passengers : 0}
-                  </p>
-                </div>
-              );
-            })}
-          </div>
+  {(() => {
+    const found = totals.find((t) => t.bus_number === selectedBus);
+    return (
+      <div
+        className="p-3 bg-gray-800 rounded-xl border-l-4"
+        style={{ borderLeftColor: colorMap[selectedBus] }}
+      >
+        <p className="text-gray-400 text-sm">{selectedBus}</p>
+        <p className="text-3xl font-bold" style={{ color: colorMap[selectedBus] }}>
+          {found ? found.total_passengers : 0}
+        </p>
+      </div>
+    );
+  })()}
+</div>
 
           {/* STATUS */}
-          <div className="bg-white/5 border border-white/10 rounded-2xl p-5">
-            <h2 className="text-lg font-semibold">System Status</h2>
-            <p className="text-green-400 font-bold mt-2">LIVE</p>
+          <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
+            <h2 className="text-lg font-semibold text-gray-300">System Status</h2>
+            <div className="flex items-center gap-2 mt-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-green-500 animate-pulse" />
+              <p className="text-green-400 font-bold">LIVE</p>
+            </div>
           </div>
 
         </div>
