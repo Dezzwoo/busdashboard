@@ -192,7 +192,6 @@ export default function Dashboard() {
       new Date(l.timestamp).toDateString() === today
   );
 
-  // Block render until auth is confirmed
   if (!authChecked) return null;
 
   return (
@@ -238,48 +237,47 @@ export default function Dashboard() {
 
         {/* LEFT */}
         <div className="lg:col-span-2 space-y-6">
+        {/* LOGS */}
+        <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm">
+          <h2 className="text-xl font-semibold mb-4">
+            📄 Live Logs —{" "}
+          <span style={{ color: colorMap[selectedBus] }}>{selectedBus}</span>
+          </h2>
 
-          {/* LOGS */}
-          <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm">
-            <h2 className="text-xl font-semibold mb-4">
-              📄 Live Logs —{" "}
-              <span style={{ color: colorMap[selectedBus] }}>{selectedBus}</span>
-            </h2>
-
-            <div className="max-h-[300px] overflow-auto">
-              <table className="w-full text-sm">
-                <thead className="text-gray-500 border-b border-gray-200">
-                  <tr>
-                    <th className="text-left py-2">ID</th>
-                    <th className="text-left py-2">Bus</th>
-                    <th className="text-left py-2">Count</th>
-                    <th className="text-left py-2">Date</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredLogs.map((l) => (
-                    <tr key={l.id} className="border-b border-gray-100 hover:bg-gray-50 transition">
-                      <td className="py-2 text-gray-400">#{l.id}</td>
-                      <td className="py-2 font-semibold">{l.bus_number}</td>
-                      <td className="py-2 font-bold" style={{ color: colorMap[l.bus_number] }}>
-                        {l.passenger_count}
-                      </td>
-                      <td className="py-2 text-gray-400">
-                        {new Date(l.timestamp).toLocaleString()}
-                      </td>
-                    </tr>
-                  ))}
-                  {filteredLogs.length === 0 && (
-                    <tr>
-                      <td colSpan={4} className="py-4 text-center text-gray-400">
-                        No logs for {selectedBus} today.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
+          <div className="max-h-[300px] overflow-auto">
+            <table className="w-full text-sm">
+            <thead className="text-gray-500 border-b border-gray-200">
+        <tr>
+          <th className="text-left py-2">ID</th>
+          <th className="text-left py-2">Bus</th>
+          <th className="text-left py-2">Count</th>
+          <th className="text-left py-2">Date</th>
+        </tr>
+      </thead>
+      <tbody>
+        {filteredLogs.map((l) => (
+          <tr key={l.id} className="border-b border-gray-100 hover:bg-gray-50 transition">
+            <td className="py-2 text-gray-400">#{l.id}</td>
+            <td className="py-2 font-semibold">{l.bus_number}</td>
+            <td className="py-2 font-bold" style={{ color: colorMap[l.bus_number] }}>
+              +1
+            </td>
+            <td className="py-2 text-gray-400">
+              {new Date(l.timestamp).toLocaleString()}
+            </td>
+          </tr>
+        ))}
+        {filteredLogs.length === 0 && (
+          <tr>
+            <td colSpan={4} className="py-4 text-center text-gray-400">
+              No logs for {selectedBus} today.
+            </td>
+          </tr>
+        )}
+      </tbody>
+    </table>
+  </div>
+</div>
 
           {/* GRAPH */}
           <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm">
