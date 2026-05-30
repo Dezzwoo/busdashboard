@@ -72,13 +72,7 @@ export default function Dashboard() {
       .order("timestamp", { ascending: true });
 
     if (!data || data.length === 0) {
-      const today = new Date();
-      const placeholder = Array.from({ length: 7 }, (_, i) => {
-        const d = new Date(today);
-        d.setDate(d.getDate() - (6 - i));
-        return { day: d.toISOString().split("T")[0], [bus]: 0 };
-      });
-      setGraphData(placeholder);
+      setGraphData([]); // ✅ empty — no fake dates
     } else {
       const grouped: Record<string, number> = {};
       data.forEach((item) => {
@@ -209,38 +203,45 @@ export default function Dashboard() {
               📊 Daily Passenger Comparison —{" "}
               <span style={{ color: colorMap[selectedBus] }}>{selectedBus}</span>
             </h2>
-            <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={graphData}>
-                <CartesianGrid stroke="#1f2937" />
-                <XAxis
-                  dataKey="day"
-                  tick={{ fontSize: 11, fill: "#9ca3af" }}
-                  tickFormatter={(val) => {
-                    const [year, month, day] = val.split("-");
-                    const date = new Date(Number(year), Number(month) - 1, Number(day));
-                    return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-                  }}
-                />
-                <YAxis tick={{ fontSize: 11, fill: "#9ca3af" }} allowDecimals={false} />
-                <Tooltip
-                  contentStyle={{ background: "#111827", border: "1px solid #374151", color: "#f9fafb" }}
-                  labelFormatter={(val) => {
-                    const [year, month, day] = val.split("-");
-                    const date = new Date(Number(year), Number(month) - 1, Number(day));
-                    return date.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" });
-                  }}
-                />
-                <Line
-                  type="monotone"
-                  dataKey={selectedBus}
-                  stroke={colorMap[selectedBus]}
-                  strokeWidth={2.5}
-                  dot={{ r: 4, fill: colorMap[selectedBus] }}
-                  activeDot={{ r: 6 }}
-                  connectNulls
-                />
-              </LineChart>
-            </ResponsiveContainer>
+
+            {graphData.length === 0 ? (
+              <p className="text-gray-500 text-sm text-center py-16">
+                No data yet for {selectedBus}.
+              </p>
+            ) : (
+              <ResponsiveContainer width="100%" height={300}>
+                <LineChart data={graphData}>
+                  <CartesianGrid stroke="#1f2937" />
+                  <XAxis
+                    dataKey="day"
+                    tick={{ fontSize: 11, fill: "#9ca3af" }}
+                    tickFormatter={(val) => {
+                      const [year, month, day] = val.split("-");
+                      const date = new Date(Number(year), Number(month) - 1, Number(day));
+                      return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+                    }}
+                  />
+                  <YAxis tick={{ fontSize: 11, fill: "#9ca3af" }} allowDecimals={false} />
+                  <Tooltip
+                    contentStyle={{ background: "#111827", border: "1px solid #374151", color: "#f9fafb" }}
+                    labelFormatter={(val) => {
+                      const [year, month, day] = val.split("-");
+                      const date = new Date(Number(year), Number(month) - 1, Number(day));
+                      return date.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" });
+                    }}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey={selectedBus}
+                    stroke={colorMap[selectedBus]}
+                    strokeWidth={2.5}
+                    dot={{ r: 4, fill: colorMap[selectedBus] }}
+                    activeDot={{ r: 6 }}
+                    connectNulls
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            )}
           </div>
 
           {/* HISTORY */}
