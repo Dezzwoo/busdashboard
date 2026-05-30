@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { supabase } from "../lib/supabase";
+import { useRouter } from "next/navigation";
+import { supabase } from "@/lib/supabase";
 import Image from "next/image";
 
 import {
@@ -41,6 +42,8 @@ type HistoryRecord = {
 const BUS_LIST = ["BUS-01", "BUS-02", "BUS-03", "BUS-04", "BUS-05", "BUS-06"];
 
 export default function Dashboard() {
+  const router = useRouter();
+  const [authChecked, setAuthChecked] = useState(false);
   const [logs, setLogs] = useState<Log[]>([]);
   const [totals, setTotals] = useState<Total[]>([]);
   const [selectedBus, setSelectedBus] = useState("BUS-01");
@@ -51,6 +54,19 @@ export default function Dashboard() {
   const [dateTo, setDateTo] = useState("");
   const [historyData, setHistoryData] = useState<HistoryRecord[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+
+  // === AUTH GUARD ===
+  useEffect(() => {
+    async function checkAuth() {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        router.replace("/login");
+      } else {
+        setAuthChecked(true);
+      }
+    }
+    checkAuth();
+  }, []);
 
   async function loadLogs() {
     const { data } = await supabase
@@ -146,6 +162,7 @@ export default function Dashboard() {
   }
 
   useEffect(() => {
+    if (!authChecked) return;
     loadLogs();
     loadTotals();
     loadGraph(selectedBus);
@@ -157,7 +174,7 @@ export default function Dashboard() {
     }, 3000);
 
     return () => clearInterval(interval);
-  }, [selectedBus]);
+  }, [selectedBus, authChecked]);
 
   const colorMap: Record<string, string> = {
     "BUS-01": "#16a34a",
@@ -175,13 +192,27 @@ export default function Dashboard() {
       new Date(l.timestamp).toDateString() === today
   );
 
+  // Block render until auth is confirmed
+  if (!authChecked) return null;
+
   return (
     <main className="min-h-screen bg-gray-50 text-gray-900 p-6">
 
       {/* HEADER */}
-      <div className="flex items-center gap-3 mb-6">
-        <Image src="/wvtc.png" alt="Bus Logo" width={50} height={50} className="rounded-lg" />
-        <h1 className="text-4xl font-bold text-gray-900">Bus Control System</h1>
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center gap-3">
+          <Image src="/wvtc.png" alt="Bus Logo" width={50} height={50} className="rounded-lg" />
+          <h1 className="text-4xl font-bold text-gray-900">Bus Control System</h1>
+        </div>
+        <button
+          onClick={async () => {
+            await supabase.auth.signOut();
+            router.replace("/login");
+          }}
+          className="px-4 py-2 bg-red-500 hover:bg-red-400 text-white text-sm font-semibold rounded-lg transition"
+        >
+          Logout
+        </button>
       </div>
 
       {/* BUS SWITCH BUTTONS */}
