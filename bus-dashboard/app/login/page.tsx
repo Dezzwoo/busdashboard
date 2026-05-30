@@ -30,7 +30,7 @@ export default function LoginPage() {
       {/* BACKGROUND IMAGE */}
       <div
         className="absolute inset-0 bg-cover bg-center"
-        style={{ backgroundImage: "url('/wvtc.png')" }}
+        style={{ backgroundImage: "url('/background.png')" }}
       />
 
       {/* BLUR OVERLAY */}
