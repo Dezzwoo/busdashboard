@@ -313,8 +313,7 @@ export default function Dashboard() {
 <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
   <h2 className="text-xl font-semibold mb-4">🚌 Bus Total Passengers</h2>
   {(() => {
-    const found = totals.find((t) => t.bus_number === selectedBus);
-    const todayCount = filteredLogs.length > 0 ? (found ? found.total_passengers : 0) : 0;
+    const todayCount = filteredLogs.length;
     return (
       <div
         className="p-3 bg-gray-800 rounded-xl border-l-4"
@@ -328,6 +327,7 @@ export default function Dashboard() {
     );
   })()}
 </div>
+
 
           {/* STATUS */}
           <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
