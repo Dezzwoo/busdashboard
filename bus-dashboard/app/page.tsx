@@ -72,7 +72,7 @@ export default function Dashboard() {
       .order("timestamp", { ascending: true });
 
     if (!data || data.length === 0) {
-      setGraphData([]); // ✅ empty — no fake dates
+      setGraphData([]);
     } else {
       const grouped: Record<string, number> = {};
       data.forEach((item) => {
@@ -120,7 +120,13 @@ export default function Dashboard() {
     "BUS-06": "#14b8a6",
   };
 
-  const filteredLogs = logs.filter((l) => l.bus_number === selectedBus);
+  // Filter logs by selected bus AND today's date only
+  const today = new Date().toDateString();
+  const filteredLogs = logs.filter(
+    (l) =>
+      l.bus_number === selectedBus &&
+      new Date(l.timestamp).toDateString() === today
+  );
 
   return (
     <main className="min-h-screen bg-gray-950 text-gray-100 p-6">
@@ -188,7 +194,7 @@ export default function Dashboard() {
                   {filteredLogs.length === 0 && (
                     <tr>
                       <td colSpan={4} className="py-4 text-center text-gray-500">
-                        No logs for {selectedBus} yet.
+                        No logs for {selectedBus} today.
                       </td>
                     </tr>
                   )}
@@ -304,23 +310,24 @@ export default function Dashboard() {
         <div className="space-y-6">
 
           {/* TOTALS — only selected bus */}
-          <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
-            <h2 className="text-xl font-semibold mb-4">🚌 Bus Total Passengers</h2>
-            {(() => {
-              const found = totals.find((t) => t.bus_number === selectedBus);
-              return (
-                <div
-                  className="p-3 bg-gray-800 rounded-xl border-l-4"
-                  style={{ borderLeftColor: colorMap[selectedBus] }}
-                >
-                  <p className="text-gray-400 text-sm">{selectedBus}</p>
-                  <p className="text-3xl font-bold" style={{ color: colorMap[selectedBus] }}>
-                    {found ? found.total_passengers : 0}
-                  </p>
-                </div>
-              );
-            })()}
-          </div>
+<div className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
+  <h2 className="text-xl font-semibold mb-4">🚌 Bus Total Passengers</h2>
+  {(() => {
+    const found = totals.find((t) => t.bus_number === selectedBus);
+    const todayCount = filteredLogs.length > 0 ? (found ? found.total_passengers : 0) : 0;
+    return (
+      <div
+        className="p-3 bg-gray-800 rounded-xl border-l-4"
+        style={{ borderLeftColor: colorMap[selectedBus] }}
+      >
+        <p className="text-gray-400 text-sm">{selectedBus}</p>
+        <p className="text-3xl font-bold" style={{ color: colorMap[selectedBus] }}>
+          {todayCount}
+        </p>
+      </div>
+    );
+  })()}
+</div>
 
           {/* STATUS */}
           <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
