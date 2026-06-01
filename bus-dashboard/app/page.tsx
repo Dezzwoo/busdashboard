@@ -37,9 +37,9 @@ type HistoryRecord = {
 };
 
 // ======================
-// BUS LIST — single source of truth
+// BUS LIST 
 // ======================
-const BUS_LIST = ["BUS-01", "BUS-02", "BUS-03", "BUS-04", "BUS-05", "BUS-06"];
+const BUS_LIST = ["BUS-01", "BUS-02", "BUS-03", "BUS-04", "BUS-05", "BUS-06" ];
 
 export default function Dashboard() {
   const router = useRouter();
@@ -240,7 +240,7 @@ export default function Dashboard() {
         {/* LOGS */}
         <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm">
           <h2 className="text-xl font-semibold mb-4">
-            📄 Live Logs —{" "}
+            Live Logs —{" "}
           <span style={{ color: colorMap[selectedBus] }}>{selectedBus}</span>
           </h2>
 
@@ -282,7 +282,7 @@ export default function Dashboard() {
           {/* GRAPH */}
           <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm">
             <h2 className="text-xl mb-4">
-              📊 Daily Passenger Comparison —{" "}
+              Daily Passenger Comparison —{" "}
               <span style={{ color: colorMap[selectedBus] }}>{selectedBus}</span>
             </h2>
 
@@ -328,7 +328,7 @@ export default function Dashboard() {
 
           {/* HISTORY */}
           <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm">
-            <h2 className="text-xl font-semibold mb-4">🗓️ Past Day Totals</h2>
+            <h2 className="text-xl font-semibold mb-4"> Past Day Totals</h2>
 
             <div className="flex flex-wrap gap-3 mb-4">
               <div className="flex items-center gap-2">
@@ -416,7 +416,7 @@ export default function Dashboard() {
 
           {/* TOTALS — all buses */}
 <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm">
-  <h2 className="text-xl font-semibold mb-4">🚌 Bus Total Passengers</h2>
+  <h2 className="text-xl font-semibold mb-4"> Bus Total Passengers</h2>
   <div className="space-y-3">
     {BUS_LIST.map((bus) => {
       const count = logs.filter(
