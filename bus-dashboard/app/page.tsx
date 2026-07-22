@@ -61,9 +61,14 @@ export default function Dashboard() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
         router.replace("/login");
-      } else {
-        setAuthChecked(true);
+        return;
       }
+      const role = session.user.user_metadata?.role;
+      if (role !== "admin") {
+        router.replace("/tickets");
+        return;
+      }
+      setAuthChecked(true);
     }
     checkAuth();
   }, []);
@@ -197,22 +202,12 @@ export default function Dashboard() {
   return (
     <main className="min-h-screen bg-gray-50 text-gray-900 p-6">
 
-      {/* HEADER */}
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-3">
-          <Image src="/wvtc.png" alt="Bus Logo" width={50} height={50} className="rounded-lg" />
-          <h1 className="text-4xl font-bold text-gray-900">Bus Control System</h1>
-        </div>
-        <button
-          onClick={async () => {
-            await supabase.auth.signOut();
-            router.replace("/login");
-          }}
-          className="px-4 py-2 bg-red-500 hover:bg-red-400 text-white text-sm font-semibold rounded-lg transition"
-        >
-          Logout
-        </button>
+           {/* HEADER */}
+      <div className="flex items-center gap-3 mb-6">
+        <Image src="/wvtc.png" alt="Bus Logo" width={50} height={50} className="rounded-lg" />
+        <h1 className="text-4xl font-bold text-gray-900">Bus Control System</h1>
       </div>
+
 
       {/* BUS SWITCH BUTTONS */}
       <div className="flex flex-wrap gap-3 mb-6">

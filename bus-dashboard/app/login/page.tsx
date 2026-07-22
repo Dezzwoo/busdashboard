@@ -1,6 +1,7 @@
+
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { supabase } from "@/lib/supabase";
@@ -9,19 +10,45 @@ export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const saved = localStorage.getItem("bus_login_remember");
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        setEmail(parsed.email || "");
+        setPassword(parsed.password || "");
+        setRememberMe(true);
+      } catch {
+        localStorage.removeItem("bus_login_remember");
+      }
+    }
+  }, []);
 
   async function handleLogin() {
     setLoading(true);
     setError("");
     const { error } = await supabase.auth.signInWithPassword({ email, password });
+
     if (error) {
       setError("Invalid email or password.");
       setLoading(false);
-    } else {
-      router.replace("/");
+      return;
     }
+
+    if (rememberMe) {
+      localStorage.setItem(
+        "bus_login_remember",
+        JSON.stringify({ email, password })
+      );
+    } else {
+      localStorage.removeItem("bus_login_remember");
+    }
+
+    router.replace("/");
   }
 
   return (
@@ -69,6 +96,15 @@ export default function LoginPage() {
               className="w-full bg-gray-100 border border-gray-300 rounded-lg px-4 py-2 text-sm text-gray-900 focus:outline-none focus:border-green-500 transition"
             />
           </div>
+
+          <label className="flex items-center gap-2 text-sm text-gray-600">
+            <input
+              type="checkbox"
+              checked={rememberMe}
+              onChange={(e) => setRememberMe(e.target.checked)}
+            />
+            Remember me
+          </label>
 
           {error && (
             <p className="text-red-500 text-sm text-center">{error}</p>

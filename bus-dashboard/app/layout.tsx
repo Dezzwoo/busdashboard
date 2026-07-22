@@ -1,9 +1,8 @@
-import type { Metadata } from "next";
 import "./globals.css";
+import AppShell from "../components/AppShell";
 
-export const metadata: Metadata = {
+export const metadata = {
   title: "Bus Control Dashboard",
-  description: "Real-time passenger monitoring system",
 };
 
 export default function RootLayout({
@@ -13,7 +12,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body className="bg-gray-100">
+        <AppShell>{children}</AppShell>
+      </body>
     </html>
   );
 }
