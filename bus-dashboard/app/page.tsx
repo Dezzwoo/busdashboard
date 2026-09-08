@@ -15,13 +15,19 @@ import {
   ResponsiveContainer,
 } from "recharts";
 
+
+// ============================================================
+// TYPES
+// ============================================================
+
 type Log = {
   id: number;
   timestamp: string;
   bus_number: string;
   passenger_count: number;
-  event_type?: string;
-  corrected?: boolean;
+  event_type?: string | null;
+  corrected?: boolean | number | string | null;
+  correction_rfid?: string | null;
 };
 
 type HistoryRecord = {
@@ -35,6 +41,11 @@ type GraphRecord = {
   passengers: number;
 };
 
+
+// ============================================================
+// BUS LIST
+// ============================================================
+
 const BUS_LIST = [
   "BUS-01",
   "BUS-02",
@@ -43,6 +54,11 @@ const BUS_LIST = [
   "BUS-05",
   "BUS-06",
 ];
+
+
+// ============================================================
+// BUS COLORS
+// ============================================================
 
 const colorMap: Record<string, string> = {
   "BUS-01": "#16a34a",
@@ -53,9 +69,25 @@ const colorMap: Record<string, string> = {
   "BUS-06": "#14b8a6",
 };
 
-/*
-  PHILIPPINE DATE
-*/
+// ===============================
+// PHILIPPINE TIME HELPERS
+// ===============================
+
+function parseTimestamp(timestamp: string | null | undefined) {
+  if (!timestamp) {
+    return new Date(NaN);
+  }
+
+  const value = String(timestamp).trim();
+
+  // Timestamp already has timezone
+  if (/[zZ]$|[+-]\d{2}:?\d{2}$/.test(value)) {
+    return new Date(value);
+  }
+
+  // Raspberry Pi stores local Philippine time without timezone
+  return new Date(`${value}+08:00`);
+}
 
 function getPhilippineDate() {
   return new Intl.DateTimeFormat("en-CA", {
@@ -66,153 +98,259 @@ function getPhilippineDate() {
   }).format(new Date());
 }
 
-function getPhilippineDateFromTimestamp(timestamp: string) {
+function getPhilippineDateFromTimestamp(
+  timestamp: string | null | undefined
+) {
+  const date = parseTimestamp(timestamp);
+
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
   return new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Manila",
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
-  }).format(new Date(timestamp));
+  }).format(date);
 }
 
+function getPhilippineTimeFromTimestamp(
+  timestamp: string | null | undefined
+) {
+  const date = parseTimestamp(timestamp);
+
+  if (Number.isNaN(date.getTime())) {
+    return "--:--:--";
+  }
+
+  return new Intl.DateTimeFormat("en-PH", {
+    timeZone: "Asia/Manila",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: true,
+  }).format(date);
+}
+
+
+// ============================================================
+// CORRECTION CHECK
+// ============================================================
+
+function isCorrected(value: unknown) {
+  return (
+    value === true ||
+    value === 1 ||
+    value === "1" ||
+    value === "true" ||
+    value === "TRUE"
+  );
+}
+
+
+// ============================================================
+// DASHBOARD
+// ============================================================
+
 export default function Dashboard() {
+
   const router = useRouter();
+
+
+  // ============================================================
+  // AUTH
+  // ============================================================
 
   const [authChecked, setAuthChecked] = useState(false);
 
+
+  // ============================================================
+  // DATA
+  // ============================================================
+
   const [logs, setLogs] = useState<Log[]>([]);
 
-  const [selectedBus, setSelectedBus] = useState("BUS-01");
+  const [selectedBus, setSelectedBus] =
+    useState("BUS-01");
 
-  const [graphData, setGraphData] = useState<GraphRecord[]>([]);
+  const [graphData, setGraphData] =
+    useState<GraphRecord[]>([]);
 
-  const [historyData, setHistoryData] = useState<HistoryRecord[]>([]);
+  const [historyData, setHistoryData] =
+    useState<HistoryRecord[]>([]);
 
-  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyLoading, setHistoryLoading] =
+    useState(false);
 
-  const [tickets, setTickets] = useState(0);
+  const [tickets, setTickets] =
+    useState(0);
 
-  /*
-    RPI CONNECTION STATUS
-  */
 
-  const [rpiConnected, setRpiConnected] = useState(false);
+  // ============================================================
+  // RPI STATUS
+  // ============================================================
 
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(
-    null
-  );
+  const [rpiConnected, setRpiConnected] =
+    useState(false);
 
-  /*
-    ============================
-    AUTHENTICATION
-    ============================
-  */
+  const [lastUpdated, setLastUpdated] =
+    useState<Date | null>(null);
+
+
+  // ============================================================
+  // AUTHENTICATION
+  // ============================================================
 
   useEffect(() => {
+
     async function checkAuth() {
+
       const {
         data: { session },
       } = await supabase.auth.getSession();
 
+
       if (!session) {
+
         router.replace("/login");
+
         return;
       }
 
-      const role = session.user.user_metadata?.role;
+
+      const role =
+        session.user.user_metadata?.role;
+
 
       if (role !== "admin") {
+
         router.replace("/tickets");
+
         return;
       }
+
 
       setAuthChecked(true);
     }
 
+
     checkAuth();
+
   }, [router]);
 
-  /*
-    ============================
-    RPI HEARTBEAT
-    ============================
-  */
+
+  // ============================================================
+  // RPI HEARTBEAT
+  // ============================================================
 
   async function loadRpiStatus() {
-    const { data, error } = await supabase
-      .from("device_status")
-      .select("last_seen")
-      .eq("device_id", "RPI-BUS-01")
-      .single();
+
+    const { data, error } =
+      await supabase
+        .from("device_status")
+        .select("last_seen")
+        .eq("device_id", `RPI-${selectedBus}`)
+        .maybeSingle();
+
 
     if (error || !data) {
+
       setRpiConnected(false);
+
       return;
     }
 
-    const lastSeen = new Date(data.last_seen).getTime();
 
-    const now = Date.now();
+    const lastSeen =
+      new Date(data.last_seen).getTime();
 
-    /*
-      RPi is considered connected if
-      heartbeat was received within 30 seconds.
-    */
+
+    const now =
+      Date.now();
+
 
     const connected =
       now - lastSeen <= 30000;
 
+
     setRpiConnected(connected);
   }
 
-  /*
-    ============================
-    LOAD LIVE LOGS
-    ============================
-  */
+
+  // ============================================================
+  // LOAD LIVE LOGS
+  // ============================================================
 
   async function loadLogs() {
-    const { data, error } = await supabase
-      .from("passengers")
-      .select("*")
-      .eq("bus_number", selectedBus)
-      .order("id", { ascending: false });
+
+    const { data, error } =
+      await supabase
+        .from("passengers")
+        .select(
+          `
+          id,
+          timestamp,
+          bus_number,
+          passenger_count,
+          event_type,
+          corrected,
+          correction_rfid
+          `
+        )
+        .eq("bus_number", selectedBus)
+        .order("id", {
+          ascending: false,
+        });
+
 
     if (error) {
+
       console.error(
         "Error loading logs:",
         error
       );
+
       return;
     }
 
-    setLogs(data || []);
+
+    setLogs(
+      (data || []) as Log[]
+    );
 
     setLastUpdated(new Date());
   }
 
-  /*
-    ============================
-    LOAD TICKETS
-    ============================
-  */
+
+  // ============================================================
+  // LOAD TICKETS
+  // ============================================================
 
   async function loadTickets() {
-    const today = getPhilippineDate();
 
-    const { data, error } = await supabase
-      .from("tickets")
-      .select("ticket_count")
-      .eq("bus_number", selectedBus)
-      .eq("date", today);
+    const today =
+      getPhilippineDate();
+
+
+    const { data, error } =
+      await supabase
+        .from("tickets")
+        .select("ticket_count")
+        .eq("bus_number", selectedBus)
+        .eq("date", today);
+
 
     if (error) {
+
       console.error(
         "Error loading tickets:",
         error
       );
+
       return;
     }
+
 
     const total =
       data?.reduce(
@@ -222,36 +360,36 @@ export default function Dashboard() {
         0
       ) || 0;
 
+
     setTickets(total);
   }
 
-  /*
-    ============================
-    DAILY PASSENGER GRAPH
-    ============================
 
-    Counts:
-    ENTER = +1
-
-    Does NOT count:
-    EXIT
-    CORRECTION
-
-    Corrected ENTER records are excluded.
-  */
+  // ============================================================
+  // DAILY GRAPH
+  // ============================================================
 
   async function loadGraph() {
-    const { data, error } = await supabase
-      .from("passengers")
-      .select(
-        "timestamp, passenger_count, event_type, corrected"
-      )
-      .eq("bus_number", selectedBus)
-      .order("timestamp", {
-        ascending: true,
-      });
+
+    const { data, error } =
+      await supabase
+        .from("passengers")
+        .select(
+          `
+          timestamp,
+          passenger_count,
+          event_type,
+          corrected
+          `
+        )
+        .eq("bus_number", selectedBus)
+        .order("timestamp", {
+          ascending: true,
+        });
+
 
     if (error) {
+
       console.error(
         "Error loading graph:",
         error
@@ -262,197 +400,243 @@ export default function Dashboard() {
       return;
     }
 
+
     if (!data) {
+
       setGraphData([]);
+
       return;
     }
 
-    const grouped: Record<string, number> =
-      {};
+
+    const grouped:
+      Record<string, number> = {};
+
 
     data.forEach((item) => {
+
       const eventType =
         item.event_type || "ENTER";
 
-      /*
-        Only valid ENTER events count.
-      */
 
+      const corrected =
+        isCorrected(item.corrected);
+
+
+      // Only valid ENTER events
       if (
         eventType === "ENTER" &&
-        item.corrected !== true
+        !corrected
       ) {
+
         const day =
           getPhilippineDateFromTimestamp(
             item.timestamp
           );
+
 
         grouped[day] =
           (grouped[day] || 0) + 1;
       }
     });
 
+
     const result: GraphRecord[] =
       Object.entries(grouped)
         .sort(([a], [b]) =>
           a.localeCompare(b)
         )
-        .map(([day, count]) => ({
-          day,
-          passengers: count,
-        }));
+        .map(
+          ([day, count]) => ({
+            day,
+            passengers: count,
+          })
+        );
+
 
     setGraphData(result);
   }
 
-  /*
-    ============================
-    HISTORY
-    ============================
-  */
+
+  // ============================================================
+  // HISTORY
+  // ============================================================
 
   async function loadHistory(
     from: string,
     to: string
   ) {
+
     if (!from || !to) return;
+
 
     setHistoryLoading(true);
 
-    const { data, error } = await supabase
-      .from("daily_totals_history")
-      .select("*")
-      .gte("date", from)
-      .lte("date", to)
-      .order("date", {
-        ascending: true,
-      });
+
+    const { data, error } =
+      await supabase
+        .from("daily_totals_history")
+        .select("*")
+        .gte("date", from)
+        .lte("date", to)
+        .order("date", {
+          ascending: true,
+        });
+
 
     if (error) {
+
       console.error(
         "Error loading history:",
         error
       );
     }
 
-    setHistoryData(data || []);
+
+    setHistoryData(
+      data || []
+    );
+
 
     setHistoryLoading(false);
   }
 
-  /*
-    ============================
-    CSV
-    ============================
-  */
+
+  // ============================================================
+  // CSV
+  // ============================================================
 
   function downloadCSV() {
+
     const headers = [
       "Bus",
       "Date",
       "Total Passengers",
     ];
 
-    const rows = historyData.map((h) => [
-      h.bus_number,
-      h.date,
-      h.total_passengers,
-    ]);
 
-    const csv = [headers, ...rows]
-      .map((row) => row.join(","))
-      .join("\n");
+    const rows =
+      historyData.map((h) => [
+        h.bus_number,
+        h.date,
+        h.total_passengers,
+      ]);
 
-    const blob = new Blob([csv], {
-      type: "text/csv",
-    });
+
+    const csv =
+      [headers, ...rows]
+        .map((row) =>
+          row.join(",")
+        )
+        .join("\n");
+
+
+    const blob =
+      new Blob([csv], {
+        type: "text/csv",
+      });
+
 
     const url =
       URL.createObjectURL(blob);
 
+
     const a =
       document.createElement("a");
 
+
     a.href = url;
+
 
     a.download =
       "bus-report.csv";
 
+
     a.click();
+
 
     URL.revokeObjectURL(url);
   }
 
-  /*
-    ============================
-    REFRESH DASHBOARD
-    ============================
-  */
+
+  // ============================================================
+  // REFRESH + REALTIME
+  // ============================================================
 
   useEffect(() => {
+
     if (!authChecked) return;
 
-    /*
-      Initial load
-    */
+
+    // Initial load
 
     loadLogs();
     loadTickets();
     loadGraph();
     loadRpiStatus();
 
-    /*
-      Refresh every 2 seconds
-    */
 
-    const interval = setInterval(() => {
-      loadLogs();
-      loadTickets();
-      loadGraph();
-      loadRpiStatus();
-    }, 2000);
+    // Refresh every 2 seconds
 
-    /*
-      SUPABASE REALTIME
-    */
+    const interval =
+      setInterval(() => {
 
-    const channel = supabase
-      .channel(
-        `passenger-dashboard-${selectedBus}`
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "passengers",
-          filter: `bus_number=eq.${selectedBus}`,
-        },
-        () => {
-          loadLogs();
-          loadGraph();
-        }
-      )
-      .subscribe();
+        loadLogs();
+        loadTickets();
+        loadGraph();
+        loadRpiStatus();
+
+      }, 2000);
+
+
+    // Supabase Realtime
+
+    const channel =
+      supabase
+        .channel(
+          `passenger-dashboard-${selectedBus}-${Date.now()}`
+        )
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "passengers",
+            filter:
+              `bus_number=eq.${selectedBus}`,
+          },
+          () => {
+
+            loadLogs();
+            loadGraph();
+
+          }
+        )
+        .subscribe();
+
 
     return () => {
+
       clearInterval(interval);
 
-      supabase.removeChannel(channel);
+      supabase.removeChannel(
+        channel
+      );
     };
+
   }, [
     authChecked,
     selectedBus,
   ]);
 
-  /*
-    ============================
-    TODAY
-    ============================
-  */
+
+  // ============================================================
+  // TODAY
+  // ============================================================
 
   const today =
     getPhilippineDate();
+
 
   const todayLogs =
     logs.filter(
@@ -462,27 +646,33 @@ export default function Dashboard() {
         ) === today
     );
 
-  /*
-    ============================
-    VALID ENTERS
-    ============================
-  */
+
+  // ============================================================
+  // VALID ENTERS
+  // ============================================================
 
   const validEnters =
     todayLogs.filter(
-      (log) =>
-        (
-          log.event_type === "ENTER" ||
-          !log.event_type
-        ) &&
-        log.corrected !== true
+      (log) => {
+
+        const eventType =
+          log.event_type ||
+          "ENTER";
+
+
+        return (
+          eventType === "ENTER" &&
+          !isCorrected(
+            log.corrected
+          )
+        );
+      }
     );
 
-  /*
-    ============================
-    EXITS
-    ============================
-  */
+
+  // ============================================================
+  // EXITS
+  // ============================================================
 
   const exits =
     todayLogs.filter(
@@ -490,20 +680,28 @@ export default function Dashboard() {
         log.event_type === "EXIT"
     );
 
-  /*
-    ============================
-    TODAY'S TOTAL
-    ============================
-  */
+
+  // ============================================================
+  // TODAY TOTAL
+  // ============================================================
 
   const todayTotal =
     validEnters.length;
 
-  /*
-    ============================
-    CURRENT PASSENGERS
-    ============================
-  */
+
+  // ============================================================
+  // TODAY'S CORRECTIONS
+  // ============================================================
+
+  const correctionCount =
+    todayLogs.filter((log) =>
+      isCorrected(log.corrected)
+    ).length;
+
+
+  // ============================================================
+  // CURRENT PASSENGERS
+  // ============================================================
 
   const livePassengers =
     Math.max(
@@ -512,29 +710,36 @@ export default function Dashboard() {
         exits.length
     );
 
-  /*
-    ============================
-    DISCREPANCY
-    ============================
-  */
+
+  // ============================================================
+  // DISCREPANCY
+  // ============================================================
 
   const discrepancy =
     todayTotal - tickets;
 
-  /*
-    ============================
-    PAGE
-    ============================
-  */
+
+  // ============================================================
+  // WAIT FOR AUTH
+  // ============================================================
 
   if (!authChecked) {
     return null;
   }
 
+
+  // ============================================================
+  // PAGE
+  // ============================================================
+
   return (
+
     <main className="min-h-screen bg-gray-50 text-gray-900 p-6">
 
-      {/* HEADER */}
+
+      {/* ======================================================
+          HEADER
+      ====================================================== */}
 
       <div className="flex items-center gap-3 mb-6">
 
@@ -552,18 +757,27 @@ export default function Dashboard() {
             Bus Control System
           </h1>
 
+
           {lastUpdated && (
+
             <p className="text-xs text-gray-400 mt-1">
+
               Last updated:{" "}
+
               {lastUpdated.toLocaleTimeString()}
+
             </p>
+
           )}
 
         </div>
 
       </div>
 
-      {/* BUS BUTTONS */}
+
+      {/* ======================================================
+          BUS BUTTONS
+      ====================================================== */}
 
       <div className="flex flex-wrap gap-3 mb-6">
 
@@ -571,10 +785,13 @@ export default function Dashboard() {
 
           <button
             key={bus}
+
             onClick={() =>
               setSelectedBus(bus)
             }
+
             style={{
+
               borderColor:
                 colorMap[bus],
 
@@ -587,21 +804,29 @@ export default function Dashboard() {
                 selectedBus === bus
                   ? "#fff"
                   : colorMap[bus],
+
             }}
+
             className="px-4 py-2 rounded-lg border-2 font-semibold"
           >
+
             {bus}
+
           </button>
 
         ))}
 
       </div>
 
-      {/* SUMMARY */}
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+      {/* ======================================================
+          SUMMARY
+      ====================================================== */}
 
-        {/* LIVE */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+
+
+        {/* LIVE PASSENGERS */}
 
         <div className="bg-white border rounded-2xl p-5 shadow-sm">
 
@@ -609,21 +834,27 @@ export default function Dashboard() {
             Live Passengers
           </p>
 
+
           <p
             className="text-4xl font-bold mt-2"
+
             style={{
               color:
                 colorMap[selectedBus],
             }}
           >
+
             {livePassengers}
+
           </p>
+
 
           <p className="text-sm text-gray-400 mt-1">
             Currently inside
           </p>
 
         </div>
+
 
         {/* TODAY */}
 
@@ -633,15 +864,18 @@ export default function Dashboard() {
             Today's Total
           </p>
 
+
           <p className="text-4xl font-bold mt-2">
             {todayTotal}
           </p>
+
 
           <p className="text-sm text-gray-400 mt-1">
             Passengers today
           </p>
 
         </div>
+
 
         {/* TICKETS */}
 
@@ -651,9 +885,11 @@ export default function Dashboard() {
             Today's Tickets
           </p>
 
+
           <p className="text-4xl font-bold text-blue-600 mt-2">
             {tickets}
           </p>
+
 
           <p className="text-sm text-gray-400 mt-1">
             Ticketed passengers
@@ -661,17 +897,45 @@ export default function Dashboard() {
 
         </div>
 
+
+        {/* CORRECTIONS */}
+
+        <div className="bg-white border rounded-2xl p-5 shadow-sm">
+
+          <p className="text-gray-500">
+            Today's Corrections
+          </p>
+
+          <p className="text-4xl font-bold text-orange-600 mt-2">
+            {correctionCount}
+          </p>
+
+          <p className="text-sm text-gray-400 mt-1">
+            Conductor corrections
+          </p>
+
+        </div>
+
       </div>
 
-      {/* MAIN GRID */}
+
+      {/* ======================================================
+          MAIN GRID
+      ====================================================== */}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
-        {/* LEFT */}
+
+        {/* ====================================================
+            LEFT
+        ==================================================== */}
 
         <div className="lg:col-span-2 space-y-6">
 
-          {/* LIVE LOGS */}
+
+          {/* ==================================================
+              LIVE LOGS
+          ================================================== */}
 
           <div className="bg-white border rounded-2xl p-5 shadow-sm">
 
@@ -685,10 +949,13 @@ export default function Dashboard() {
                     colorMap[selectedBus],
                 }}
               >
+
                 {selectedBus}
+
               </span>
 
             </h2>
+
 
             <div className="max-h-[350px] overflow-auto">
 
@@ -714,6 +981,7 @@ export default function Dashboard() {
 
                 </thead>
 
+
                 <tbody>
 
                   {todayLogs.map(
@@ -723,9 +991,12 @@ export default function Dashboard() {
                         log.event_type ===
                         "EXIT";
 
+
                       const isCorrection =
-                        log.corrected ===
-                        true;
+                        isCorrected(
+                          log.corrected
+                        );
+
 
                       return (
 
@@ -735,8 +1006,11 @@ export default function Dashboard() {
                         >
 
                           <td className="py-2 text-gray-400">
+
                             #{log.id}
+
                           </td>
+
 
                           <td
                             className={`py-2 font-bold ${
@@ -756,6 +1030,7 @@ export default function Dashboard() {
 
                           </td>
 
+
                           <td className="py-2 text-gray-400">
 
                             {new Date(
@@ -771,6 +1046,7 @@ export default function Dashboard() {
                     }
                   )}
 
+
                   {todayLogs.length ===
                     0 && (
 
@@ -780,7 +1056,9 @@ export default function Dashboard() {
                         colSpan={3}
                         className="py-6 text-center text-gray-400"
                       >
+
                         No logs yet.
+
                       </td>
 
                     </tr>
@@ -795,7 +1073,10 @@ export default function Dashboard() {
 
           </div>
 
-          {/* DAILY PASSENGER COMPARISON */}
+
+          {/* ==================================================
+              DAILY GRAPH
+          ================================================== */}
 
           <div className="bg-white border rounded-2xl p-5 shadow-sm">
 
@@ -807,21 +1088,27 @@ export default function Dashboard() {
                   Daily Passenger Comparison
                 </h2>
 
+
                 <p className="text-sm text-gray-400 mt-1">
+
                   {selectedBus} — valid passenger entries
+
                 </p>
 
               </div>
+
 
               <div className="flex items-center gap-2">
 
                 <span
                   className="w-2.5 h-2.5 rounded-full animate-pulse"
+
                   style={{
                     backgroundColor:
                       colorMap[selectedBus],
                   }}
                 />
+
 
                 <span className="text-xs text-gray-500">
                   Live
@@ -830,6 +1117,7 @@ export default function Dashboard() {
               </div>
 
             </div>
+
 
             {graphData.length ===
               0 ? (
@@ -853,9 +1141,11 @@ export default function Dashboard() {
                     stroke="#e5e7eb"
                   />
 
+
                   <XAxis
                     dataKey="day"
                   />
+
 
                   <YAxis
                     allowDecimals={false}
@@ -869,7 +1159,9 @@ export default function Dashboard() {
                     ]}
                   />
 
+
                   <Tooltip />
+
 
                   <Line
                     type="monotone"
@@ -893,6 +1185,7 @@ export default function Dashboard() {
 
             )}
 
+
             {/* GRAPH TOTAL */}
 
             <div className="mt-4 pt-4 border-t flex justify-between">
@@ -901,27 +1194,35 @@ export default function Dashboard() {
                 Today's graph total
               </span>
 
+
               <span
                 className="font-bold text-lg"
+
                 style={{
                   color:
                     colorMap[selectedBus],
                 }}
               >
+
                 {todayTotal}
+
               </span>
 
             </div>
 
           </div>
 
-          {/* HISTORY */}
+
+          {/* ==================================================
+              HISTORY
+          ================================================== */}
 
           <div className="bg-white border rounded-2xl p-5 shadow-sm">
 
             <h2 className="text-xl font-semibold mb-4">
               Past Day Totals
             </h2>
+
 
             <div className="flex flex-wrap gap-3 mb-4">
 
@@ -931,11 +1232,13 @@ export default function Dashboard() {
                 className="bg-gray-100 border rounded-lg px-3 py-2"
               />
 
+
               <input
                 id="to"
                 type="date"
                 className="bg-gray-100 border rounded-lg px-3 py-2"
               />
+
 
               <button
                 onClick={() => {
@@ -947,6 +1250,7 @@ export default function Dashboard() {
                       ) as HTMLInputElement
                     ).value;
 
+
                   const to =
                     (
                       document.getElementById(
@@ -954,16 +1258,21 @@ export default function Dashboard() {
                       ) as HTMLInputElement
                     ).value;
 
+
                   loadHistory(
                     from,
                     to
                   );
 
                 }}
+
                 className="px-4 py-2 bg-green-600 text-white rounded-lg"
               >
+
                 Search
+
               </button>
+
 
               {historyData.length >
                 0 && (
@@ -972,14 +1281,18 @@ export default function Dashboard() {
                   onClick={
                     downloadCSV
                   }
+
                   className="px-4 py-2 bg-blue-600 text-white rounded-lg"
                 >
+
                   CSV
+
                 </button>
 
               )}
 
             </div>
+
 
             {historyLoading && (
 
@@ -988,6 +1301,7 @@ export default function Dashboard() {
               </p>
 
             )}
+
 
             {historyData.length >
               0 && (
@@ -1014,42 +1328,45 @@ export default function Dashboard() {
 
                 </thead>
 
+
                 <tbody>
 
                   {historyData.map(
                     (h, i) => (
 
-                      <tr
-                        key={i}
-                        className="border-b"
+                    <tr
+                      key={i}
+                      className="border-b"
+                    >
+
+                      <td
+                        className="py-2 font-semibold"
+
+                        style={{
+                          color:
+                            colorMap[
+                              h.bus_number
+                            ],
+                        }}
                       >
 
-                        <td
-                          className="py-2 font-semibold"
-                          style={{
-                            color:
-                              colorMap[
-                                h.bus_number
-                              ],
-                          }}
-                        >
-                          {h.bus_number}
-                        </td>
+                        {h.bus_number}
 
-                        <td className="py-2">
-                          {h.date}
-                        </td>
+                      </td>
 
-                        <td className="py-2 font-bold">
-                          {
-                            h.total_passengers
-                          }
-                        </td>
 
-                      </tr>
+                      <td className="py-2">
+                        {h.date}
+                      </td>
 
-                    )
-                  )}
+
+                      <td className="py-2 font-bold">
+                        {h.total_passengers}
+                      </td>
+
+                    </tr>
+
+                  ))}
 
                 </tbody>
 
@@ -1061,17 +1378,24 @@ export default function Dashboard() {
 
         </div>
 
-        {/* RIGHT */}
+
+        {/* ====================================================
+            RIGHT
+        ==================================================== */}
 
         <div className="space-y-6">
 
-          {/* SYSTEM STATUS */}
+
+          {/* ==================================================
+              SYSTEM STATUS
+          ================================================== */}
 
           <div className="bg-white border rounded-2xl p-5 shadow-sm">
 
             <h2 className="text-lg font-semibold">
               System Status
             </h2>
+
 
             <div className="flex items-center gap-3 mt-4">
 
@@ -1083,6 +1407,7 @@ export default function Dashboard() {
                 }`}
               />
 
+
               <span
                 className={`font-bold text-lg ${
                   rpiConnected
@@ -1090,9 +1415,11 @@ export default function Dashboard() {
                     : "text-red-600"
                 }`}
               >
+
                 {rpiConnected
                   ? "CONNECTED"
                   : "DISCONNECTED"}
+
               </span>
 
             </div>
