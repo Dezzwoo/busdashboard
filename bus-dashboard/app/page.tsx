@@ -702,15 +702,20 @@ export default function Dashboard() {
   // ============================================================
   // CURRENT PASSENGERS
   // ============================================================
-
-  const livePassengers =
-    Math.max(
-      0,
-      validEnters.length -
-        exits.length
-    );
-
-
+  const livePassengers = Math.max(
+  0,
+  [...todayLogs]
+    .sort(
+      (a, b) =>
+        new Date(a.timestamp).getTime() -
+        new Date(b.timestamp).getTime()
+    )
+    .reduce((total, log) => {
+      if (log.event_type === "ENTER") return total + 1;
+      if (log.event_type === "EXIT") return Math.max(0, total - 1);
+      return total;
+    }, 0) - correctionCount
+);
   // ============================================================
   // DISCREPANCY
   // ============================================================
